@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace alvin0319\Crossbow;
 
 use alvin0319\Crossbow\item\Crossbow;
+use alvin0319\Crossbow\item\ExtraVanillaItems;
 use pocketmine\data\bedrock\EnchantmentIdMap;
 use pocketmine\data\bedrock\EnchantmentIds;
+use pocketmine\data\bedrock\item\ItemTypeNames;
+use pocketmine\data\bedrock\item\SavedItemData;
 use pocketmine\event\Listener;
 use pocketmine\event\player\PlayerItemUseEvent;
 use pocketmine\event\server\DataPacketReceiveEvent;
@@ -15,28 +18,34 @@ use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\enchantment\ItemFlags;
 use pocketmine\item\enchantment\Rarity;
 use pocketmine\item\enchantment\StringToEnchantmentParser;
-use pocketmine\item\ItemFactory;
-use pocketmine\item\ItemIdentifier;
-use pocketmine\item\ItemIds;
 use pocketmine\item\ItemUseResult;
+use pocketmine\item\StringToItemParser;
 use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\InventoryTransactionPacket;
+use pocketmine\network\mcpe\protocol\types\inventory\ItemStack;
 use pocketmine\network\mcpe\protocol\types\inventory\ReleaseItemTransactionData;
 use pocketmine\network\mcpe\protocol\types\inventory\UseItemTransactionData;
 use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
 use pocketmine\utils\AssumptionFailedError;
+use pocketmine\world\format\io\GlobalItemDataHandlers;
 
 final class CrossbowLoader extends PluginBase implements Listener{
 
 	public static array $crossbowLoadData = [];
 
 	public function onEnable() : void{
+        $itemDeserializer = GlobalItemDataHandlers::getDeserializer();
+        $itemSerializer = GlobalItemDataHandlers::getSerializer();
+        $creativeInventory = CreativeInventory::getInstance();
+        $stringToItemParser = StringToItemParser::getInstance();
+
+        $crossbow = ExtraVanillaItems::CROSSBOW();
+        $itemDeserializer->map(ItemTypeNames::CROSSBOW, static fn() => clone $crossbow);
+        $itemSerializer->map($crossbow, static fn() => new SavedItemData(ItemTypeNames::CROSSBOW));
+        $creativeInventory->add($crossbow);
+        $stringToItemParser->register("crossbow", static fn() => clone $crossbow);
 		$this->getServer()->getPluginManager()->registerEvents($this, $this);
-
-		ItemFactory::getInstance()->register($crossbow = new Crossbow(new ItemIdentifier(ItemIds::CROSSBOW, 0), "Crossbow"), true);
-
-		CreativeInventory::getInstance()->add($crossbow);
 
 		$enchMap = EnchantmentIdMap::getInstance();
 
@@ -55,7 +64,8 @@ final class CrossbowLoader extends PluginBase implements Listener{
 						$quickCharge = $itemInHand->getEnchantmentLevel($enchMap->fromId(EnchantmentIds::QUICK_CHARGE));
 						$time = $player->getItemUseDuration();
 						if($time >= 24 - $quickCharge * 5){
-							$itemInHand->onReleaseUsing($player);
+                            $returnedItems = [];
+                            $itemInHand->onReleaseUsing($player, $returnedItems);
 							$player->getInventory()->setItemInHand($itemInHand);
 							unset(self::$crossbowLoadData[$name]);
 						}
@@ -82,7 +92,8 @@ final class CrossbowLoader extends PluginBase implements Listener{
 		$player = $event->getOrigin()->getPlayer() ?: throw new AssumptionFailedError("Player is not online");
 		$trData = $packet->trData;
 		$conv = TypeConverter::getInstance();
-		switch(true){
+        $returnedItems = [];
+        switch(true){
 			case $trData instanceof UseItemTransactionData:
 				$item = $conv->netItemStackToCore($trData->getItemInHand()->getItemStack());
 				if($item instanceof Crossbow){
@@ -96,8 +107,8 @@ final class CrossbowLoader extends PluginBase implements Listener{
 					if($ev->isCancelled()){
 						return;
 					}
-					if($item->onClickAir($player, $player->getDirectionVector())->equals(ItemUseResult::FAIL())){
-						$player->getNetworkSession()->getInvManager()?->syncSlot($player->getInventory(), $player->getInventory()->getHeldItemIndex());
+					if($item->onClickAir($player, $player->getDirectionVector(), $returnedItems)->equals(ItemUseResult::FAIL())){
+						$player->getNetworkSession()->getInvManager()?->syncSlot($player->getInventory(), $player->getInventory()->getHeldItemIndex(), ItemStack::null());
 						return;
 					}
 					$player->resetItemCooldown($item);
@@ -118,7 +129,7 @@ final class CrossbowLoader extends PluginBase implements Listener{
 					if(!$player->isUsingItem() || $player->hasItemCooldown($item)){
 						return;
 					}
-					if($item->onReleaseUsing($player)->equals(ItemUseResult::SUCCESS())){
+					if($item->onReleaseUsing($player, $returnedItems)->equals(ItemUseResult::SUCCESS())){
 						$player->resetItemCooldown($item);
 						$player->getInventory()->setItemInHand($item);
 					}

@@ -28,7 +28,13 @@ use function sin;
 
 final class Crossbow extends Tool{
 
-	public function onClickAir(Player $player, Vector3 $directionVector) : ItemUseResult{
+    /**
+     * @param Player $player
+     * @param Vector3 $directionVector
+     * @param array $returnedItems
+     * @return ItemUseResult
+     */
+    public function onClickAir(Player $player, Vector3 $directionVector, array &$returnedItems): ItemUseResult {
 		$arrow = VanillaItems::ARROW()
 			->setCount(1);
 		$enchIdMap = EnchantmentIdMap::getInstance();
@@ -45,10 +51,6 @@ final class Crossbow extends Tool{
 			$item = Item::nbtDeserialize($this->getNamedTag()->getCompoundTag("chargedItem"));
 			$this->setCharged(null);
 			if($item instanceof ArrowItem){
-				//$nbt = Entity::createBaseNBT($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $directionVector, ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch);
-				///** @var ArrowEntity $entity */
-				//$entity = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
-				//$entity->setOwningEntity($player);
 
 				$entity = new ArrowEntity(Location::fromObject($player->getDirectionVector()->multiply(1.3)->addVector($player->getPosition()->add(0, $player->getEyeHeight(), 0)), $player->getWorld(), ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch), $player, false);
 
@@ -124,7 +126,12 @@ final class Crossbow extends Tool{
 		return ItemUseResult::SUCCESS();
 	}
 
-	public function onReleaseUsing(Player $player) : ItemUseResult{
+    /**
+     * @param Player $player
+     * @param array $returnedItems
+     * @return ItemUseResult
+     */
+	public function onReleaseUsing(Player $player, array &$returnedItems) : ItemUseResult{
 		unset(CrossbowLoader::$crossbowLoadData[$player->getName()]);
 		$arrow = VanillaItems::ARROW()->setCount(1);
 		$quickCharge = $this->getEnchantmentLevel(EnchantmentIdMap::getInstance()->fromId(EnchantmentIds::QUICK_CHARGE));
@@ -140,14 +147,24 @@ final class Crossbow extends Tool{
 		return ItemUseResult::FAIL();
 	}
 
+    /**
+     * @return int
+     */
 	public function getMaxDurability() : int{
 		return 464;
 	}
 
+    /**
+     * @return bool
+     */
 	public function isCharged() : bool{
 		return $this->getNamedTag()->getCompoundTag("chargedItem") !== null;
 	}
 
+    /**
+     * @param Item|null $item
+     * @return void
+     */
 	public function setCharged(?Item $item) : void{
 		if($item === null){
 			$this->getNamedTag()->removeTag("chargedItem");
